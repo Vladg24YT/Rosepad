@@ -13,7 +13,9 @@ public class ThreadNetworkKeepAlive extends Thread {
     public void run() {
         System.out.println("Started alive keeper");
 
-        while (this.manager.isRunning && !this.manager.isServerTerminating) {
+        boolean isRunning = false;
+
+        while (this.manager.getIsRunning()) {
             try {
                 Thread.sleep(5000);
             } catch (InterruptedException e) {
