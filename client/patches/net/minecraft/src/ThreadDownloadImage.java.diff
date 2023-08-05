@@ -1,11 +1,20 @@
 --- ThreadDownloadImage.java
 +++ ThreadDownloadImage.java
-@@ -22,14 +22,31 @@
+@@ -15,5 +15,5 @@
+     private String buffer;
+     private IImageBuffer imageData;
+-    
++
+     ThreadDownloadImage(final ThreadDownloadImageData downloadImageData, final String location, final IImageBuffer image) {
+         this.location = downloadImageData;
+@@ -21,15 +21,32 @@
+         this.imageData = image;
      }
-     
+-    
++
 +    public boolean checkUsername(String username) {
 +    	if (username.length() < 2 || username.length() > 32) return false;
-+    	String fine = "qwertyuiopasdfghjklzxcvbnnmQWERTYUIOPASDFGHJKLZXVBNM1234567890-_";
++    	String fine = "qwertyuiopasdfghjklzxcvbnnmQWERTYUIOPASDFGHJKLZXCVBNM1234567890-_";
 +    	for (int i = 0; i < username.length(); i++) {
 +    		boolean good = false;
 +    		for (int o = 0; o < fine.length(); o++) {
@@ -18,7 +27,7 @@
 +    	}
 +    	return true;
 +    }
-+    
++
      public void run() {
          if (this.buffer.startsWith("skin:///")) {
              HttpURLConnection skinURLConnection = null;

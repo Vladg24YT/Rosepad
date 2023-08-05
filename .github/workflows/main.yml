@@ -4,7 +4,7 @@
 # against bad commits.
 
 name: build
-on: [pull_request, push, workflow_dispatch]
+on: [push, workflow_dispatch]
 
 jobs:
   build:
@@ -20,30 +20,41 @@ jobs:
         uses: actions/checkout@v3
         with:
           submodules: recursive
+
       - name: validate gradle wrapper
         uses: gradle/wrapper-validation-action@v1
+
       - name: setup jdk ${{ matrix.java1 }}
         uses: actions/setup-java@v3
         with:
           distribution: 'zulu'
           java-version: ${{ matrix.java1 }}
+
       - name: setup jdk ${{ matrix.java2 }}
         uses: actions/setup-java@v3
         with:
           distribution: 'zulu'
           java-version: ${{ matrix.java2 }}
+
       - name: make gradle wrapper executable
         run: chmod +x ./gradlew
+
       - name: build
-        run: TOOLKIT_JAVA17=$(echo /opt/hostedtoolcache/Java_Zulu_jdk/17.*/x64) ./gradlew -Dorg.gradle.java.home=$(echo /opt/hostedtoolcache/Java_Zulu_jdk/8.*/x64) prepare injectClasses processPatches shadowJar pack
+        run: TOOLKIT_JAVA17=$(echo /opt/hostedtoolcache/Java_Zulu_jdk/17.*/x64) ./gradlew -Dorg.gradle.java.home=$(echo /opt/hostedtoolcache/Java_Zulu_jdk/8.*/x64)
+
+      - name: purge artifacts
+        uses: c-hive/gha-remove-artifacts@v1
+        with:
+          age: 0
+
       - name: capture client
         uses: actions/upload-artifact@v3
         with:
           name: RosepadClient
           path: build/RosepadClient.jar
+
       - name: capture server
         uses: actions/upload-artifact@v3
         with:
           name: RosepadServer
           path: build/RosepadServer.jar
-

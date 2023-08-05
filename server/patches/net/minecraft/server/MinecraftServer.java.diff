@@ -1,14 +1,52 @@
 --- MinecraftServer.java
 +++ MinecraftServer.java
-@@ -1,4 +1,6 @@
+@@ -1,44 +1,27 @@
  package net.minecraft.server;
  
+-import net.minecraft.src.ThreadServerApplication;
+-import net.minecraft.src.ServerGUI;
++import net.buj.rml.Chat;
++import net.buj.rml.Environment;
++import net.buj.rml.Game;
 +import net.buj.rml.MinecraftImpl;
-+import net.buj.rml.RosepadModLoader;
- import net.minecraft.src.ThreadServerApplication;
- import net.minecraft.src.ServerGUI;
-@@ -38,7 +40,7 @@
- import net.minecraft.src.ICommandListener;
++import net.minecraft.src.*;
++
+ import java.awt.GraphicsEnvironment;
+-import net.minecraft.src.Packet3Chat;
+-import net.minecraft.src.ItemStack;
+-import net.minecraft.src.Item;
+-import net.minecraft.src.EntityPlayerMP;
+-import net.minecraft.src.ServerCommand;
+-import java.util.Iterator;
+-import net.minecraft.src.IUpdatePlayerListBox;
+-import net.minecraft.src.Packet;
+-import net.minecraft.src.Packet4UpdateTime;
+-import net.minecraft.src.Vec3D;
+-import net.minecraft.src.AxisAlignedBB;
+-import net.minecraft.src.IProgressUpdate;
+-import net.minecraft.src.IWorldAccess;
+-import net.minecraft.src.WorldManager;
++import java.nio.file.Path;
+ import java.io.IOException;
++import java.nio.file.Paths;
+ import java.util.logging.Level;
+ import java.net.InetAddress;
+ import java.io.File;
+-import net.minecraft.src.ConsoleLogManager;
+-import net.minecraft.src.ThreadCommandReader;
+-import net.minecraft.src.ThreadSleepForeverServer;
+ import java.util.Collections;
+ import java.util.ArrayList;
+ import java.util.Random;
+-import net.minecraft.src.EntityTracker;
+ import java.util.List;
+-import net.minecraft.src.ServerConfigurationManager;
+-import net.minecraft.src.WorldServer;
+-import net.minecraft.src.PropertyManager;
+-import net.minecraft.src.NetworkListenThread;
+ import java.util.HashMap;
+ import java.util.logging.Logger;
+-import net.minecraft.src.ICommandListener;
  
 -public class MinecraftServer implements ICommandListener, Runnable {
 +public class MinecraftServer implements ICommandListener, Runnable, MinecraftImpl {
@@ -17,7 +55,7 @@
 +    public static HashMap<String, Integer> playerList;
      public NetworkListenThread networkServer;
      public PropertyManager propertyManagerObj;
-@@ -50,6 +52,6 @@
+@@ -50,6 +33,6 @@
      public String currentTask;
      public int percentDone;
 -    private List playersOnline;
@@ -26,21 +64,21 @@
 +    private final List<ServerCommand> commands;
      public EntityTracker entityTracker;
      public boolean onlineMode;
-@@ -57,8 +59,31 @@
+@@ -57,20 +40,76 @@
      public String serverId;
      private static Random rand;
-+    public RosepadModLoader modLoader;
+-    
 +
 +    public static MinecraftServer INSTANCE;
-     
++
 +    public int[] getVersion() {
-+    	return new int[] { 1, 1, 0, 6 };
++    	return new int[] { 1, 1, 0, 7 };
 +    }
-+    
++
 +    public String getVersionTag() {
 +    	return "dev";
 +    }
-+    
++
 +    public String getVersionString() {
 +    	int[] version = getVersion();
 +    	StringBuilder str = new StringBuilder();
@@ -52,27 +90,64 @@
 +    	if (tag.length() > 0) str.append("-").append(tag);
 +    	return str.toString();
 +    }
-+    
++
++    public Path getGameDirectory() {
++        return Paths.get(".");
++    }
++
      static {
          MinecraftServer.logger = Logger.getLogger("Minecraft");
 -        MinecraftServer.playerList = new HashMap();
 +        MinecraftServer.playerList = new HashMap<>();
          MinecraftServer.rand = new Random(System.currentTimeMillis());
      }
-@@ -68,7 +93,10 @@
+-    
++
+     public MinecraftServer() {
++        Game.MINECRAFT = INSTANCE = this;
++        Game.ENVIRONMENT = Environment.SERVER;
++        Game.OPTIONS = propertyManagerObj = new PropertyManager(new File("server.properties"));
++
++        Material.initAll();
++        Block.initAll();
++        Item.initAll();
++        Packet.initAll();
++        TileEntity.initAll();
++
++        Game.CHAT = new Chat() {
++
++            @Override
++            public void clear() {}
++
++            @Override
++            public void append(String text) {
++                Packet3Chat chat = new Packet3Chat(text);
++                MinecraftServer.INSTANCE.configManager.sendPacketToAllPlayers(chat);
++            }
++
++            @Override
++            public void append(String username, String text) {
++                Packet3Chat chat = new Packet3Chat(text);
++                MinecraftServer.INSTANCE.configManager.sendPacketToPlayer(username, chat);
++            }
++        };
++
++        Game.__syncDeprecated();
++
+         this.serverRunning = true;
          this.serverStopped = false;
          this.deathTime = 0;
 -        this.playersOnline = (List)new ArrayList();
 -        this.commands = Collections.synchronizedList((List)new ArrayList());
 +        this.playersOnline = new ArrayList<>();
 +        this.commands = Collections.synchronizedList(new ArrayList<>());
-+        this.modLoader = new RosepadModLoader();
          new ThreadSleepForeverServer(this);
-+
-+        INSTANCE = this;
      }
-     
-@@ -78,9 +106,10 @@
+-    
++
+     private boolean startServer() throws IOException {
+         final ThreadCommandReader threadCommandReader1 = new ThreadCommandReader(this);
+@@ -78,20 +117,31 @@
          threadCommandReader1.start();
          ConsoleLogManager.init();
 -        MinecraftServer.logger.info("Starting minecraft server version 0.2.1");
@@ -83,36 +158,106 @@
          }
 +        MinecraftServer.logger.info("Loading mods");
          MinecraftServer.logger.info("Loading properties");
-         this.propertyManagerObj = new PropertyManager(new File("server.properties"));
-@@ -93,5 +122,5 @@
+-        this.propertyManagerObj = new PropertyManager(new File("server.properties"));
+-        final String string2 = this.propertyManagerObj.getStringProperty("server-ip", "");
++        try {
++            Game.MOD_LOADER.runPre(Environment.SERVER);
++        } catch (Exception e) {
++            throw new RuntimeException(e);
++        }
++        propertyManagerObj.load();
++        try {
++            Game.MOD_LOADER.runInit(Environment.SERVER);
++        } catch (Exception e) {
++            throw new RuntimeException(e);
++        }
++        final String string2 = this.propertyManagerObj.<String>getOption("server-ip").getValue();
+         this.onlineMode = false;
+-        this.ULPPOnlineMode = this.propertyManagerObj.getBooleanProperty("online-mode", true);
++        this.ULPPOnlineMode = this.propertyManagerObj.<Boolean>getOption("online-mode").getValue();
+         InetAddress inetAddress3 = null;
+         if (string2.length() > 0) {
+             inetAddress3 = InetAddress.getByName(string2);
          }
-         final int i4 = this.propertyManagerObj.getIntProperty("server-port", 25565);
+-        final int i4 = this.propertyManagerObj.getIntProperty("server-port", 25565);
 -        MinecraftServer.logger.info(new StringBuilder("Starting Minecraft server on ").append((string2.length() == 0) ? "*" : string2).append(":").append(i4).toString());
++        final int i4 = this.propertyManagerObj.<Integer>getOption("server-port").getValue();
 +        MinecraftServer.logger.info("Starting Minecraft server on " + ((string2.length() == 0) ? "*" : string2) + ":" + i4);
          this.serverId = Long.toHexString(MinecraftServer.rand.nextLong());
          try {
-@@ -100,5 +129,5 @@
+@@ -100,5 +150,5 @@
          catch (IOException iOException6) {
              MinecraftServer.logger.warning("**** FAILED TO BIND TO PORT!");
 -            MinecraftServer.logger.log(Level.WARNING, new StringBuilder("The exception was: ").append(iOException6.toString()).toString());
-+            MinecraftServer.logger.log(Level.WARNING, "The exception was: " + iOException6.toString());
++            MinecraftServer.logger.log(Level.WARNING, "The exception was: " + iOException6);
              MinecraftServer.logger.warning("Perhaps a server is already running on that port?");
              return false;
-@@ -118,5 +147,5 @@
+@@ -117,14 +167,14 @@
+         this.configManager = new ServerConfigurationManager(this);
          this.entityTracker = new EntityTracker(this);
-         final String string3 = this.propertyManagerObj.getStringProperty("level-name", "world");
+-        final String string3 = this.propertyManagerObj.getStringProperty("level-name", "world");
 -        MinecraftServer.logger.info(new StringBuilder("Preparing level \"").append(string3).append("\"").toString());
++        final String string3 = this.propertyManagerObj.<String>getOption("level-name").getValue();
 +        MinecraftServer.logger.info("Preparing level \"" + string3 + "\"");
          this.initWorld(string3);
          MinecraftServer.logger.info("Done! For help, type \"help\" or \"?\"");
-@@ -145,5 +174,5 @@
+         return true;
+     }
+-    
++
+     private void initWorld(final String worldName) {
+         MinecraftServer.logger.info("Preparing start region");
+-        (this.worldMngr = new WorldServer(new File("."), worldName, this.propertyManagerObj.getBooleanProperty("monsters", false))).addWorldAccess(new WorldManager(this));
++        (this.worldMngr = new WorldServer(new File("."), worldName, this.propertyManagerObj.<Boolean>getOption("monsters").getValue())).addWorldAccess(new WorldManager(this));
+         this.worldMngr.difficultySetting = 1;
+         this.configManager.setPlayerManager(this.worldMngr);
+@@ -141,21 +191,21 @@
+         this.clearCurrentTask();
+     }
+-    
++
+     private void outputPercentRemaining(final String currentTask, final int percent) {
          this.currentTask = currentTask;
          this.percentDone = percent;
 -        System.out.println(String.valueOf(currentTask) + ": " + percent + "%");
 +        System.out.println(currentTask + ": " + percent + "%");
      }
-     
-@@ -223,9 +252,4 @@
+-    
++
+     private void clearCurrentTask() {
+         this.currentTask = null;
+         this.percentDone = 0;
+     }
+-    
++
+     private void save() {
+         MinecraftServer.logger.info("Saving chunks");
+         this.worldMngr.saveWorld(true, null);
+     }
+-    
++
+     private void stop() {
+         MinecraftServer.logger.info("Stopping server");
+@@ -167,9 +217,9 @@
+         }
+     }
+-    
++
+     public void stopRunning() {
+         this.serverRunning = false;
+     }
+-    
++
+     public void run() {
+         try {
+@@ -211,5 +261,5 @@
+         catch (Exception exception16) {
+             exception16.printStackTrace();
+-            MinecraftServer.logger.log(Level.SEVERE, "Unexpected exception", (Throwable)exception16);
++            MinecraftServer.logger.log(Level.SEVERE, "Unexpected exception", exception16);
+             while (this.serverRunning) {
+                 this.commandLineParser();
+@@ -223,18 +273,14 @@
              return;
          }
 -        finally {
@@ -122,17 +267,20 @@
 -        }
          this.stop();
          this.serverStopped = true;
-@@ -234,7 +258,7 @@
-     
+         System.exit(0);
+     }
+-    
++
      private void doTick() throws IOException {
 -        final ArrayList arrayList1 = new ArrayList();
++        Game.EVENT_LOOP.runQueuedFns();
 +        final ArrayList<String> arrayList1 = new ArrayList<>();
          for (final String string3 : MinecraftServer.playerList.keySet()) {
 -            final int i4 = (int)MinecraftServer.playerList.get(string3);
 +            final int i4 = MinecraftServer.playerList.get(string3);
              if (i4 > 0) {
                  MinecraftServer.playerList.put(string3, (i4 - 1));
-@@ -244,6 +268,6 @@
+@@ -244,6 +290,6 @@
              }
          }
 -        for (int i5 = 0; i5 < arrayList1.size(); ++i5) {
@@ -141,7 +289,7 @@
 +            MinecraftServer.playerList.remove(s);
          }
          AxisAlignedBB.clearBoundingBoxPool();
-@@ -254,11 +278,11 @@
+@@ -254,11 +300,11 @@
          }
          this.worldMngr.tick();
 -        while (this.worldMngr.updatingLighting()) {}
@@ -156,7 +304,11 @@
 +            iUpdatePlayerListBox.addAllPlayers();
          }
          try {
-@@ -269,5 +293,7 @@
+@@ -266,15 +312,17 @@
+         }
+         catch (Exception exception5) {
+-            MinecraftServer.logger.log(Level.WARNING, "Unexpected exception while parsing console command", (Throwable)exception5);
++            MinecraftServer.logger.log(Level.WARNING, "Unexpected exception while parsing console command", exception5);
          }
      }
 -    
@@ -165,14 +317,23 @@
 +
      public void addCommand(final String command, final ICommandListener commandListener) {
          this.commands.add(new ServerCommand(command, commandListener));
-@@ -282,5 +308,5 @@
+     }
+-    
++
+     public void commandLineParser() {
+         while (this.commands.size() > 0) {
+-            final ServerCommand serverCommand1 = (ServerCommand)this.commands.remove(0);
++            final ServerCommand serverCommand1 = this.commands.remove(0);
+             String string2 = serverCommand1.command;
+             final ICommandListener iCommandListener3 = serverCommand1.commandListener;
+@@ -282,5 +330,5 @@
              if (!string2.toLowerCase().startsWith("help") && !string2.toLowerCase().startsWith("?")) {
                  if (string2.toLowerCase().startsWith("list")) {
 -                    iCommandListener3.addHelpCommandMessage(new StringBuilder("Connected players: ").append(this.configManager.getPlayerList()).toString());
 +                    iCommandListener3.addHelpCommandMessage("Connected players: " + this.configManager.getPlayerList());
                  }
                  else if (string2.toLowerCase().startsWith("stop")) {
-@@ -432,4 +458,77 @@
+@@ -432,4 +480,77 @@
                      iCommandListener3.addHelpCommandMessage("There's no player by that name online.");
                  }
 +                else if (string2.toLowerCase().startsWith("whitelist")) {
@@ -250,9 +411,65 @@
 +                }
                  else {
                      MinecraftServer.logger.info("Unknown console command. Type \"help\" for help.");
-@@ -457,4 +556,5 @@
+@@ -457,14 +578,15 @@
                  iCommandListener3.addHelpCommandMessage("   list                      lists all currently connected players");
                  iCommandListener3.addHelpCommandMessage("   say <message>             broadcasts a message to all players");
 +                iCommandListener3.addHelpCommandMessage("   whitelist                 manage server whitelist");
              }
          }
+     }
+-    
++
+     private void print(final String string1, final String string2) {
+         final String string3 = String.valueOf(string1) + ": " + string2;
+-        this.configManager.sendChatMessageToAllOps(new StringBuilder("§7(").append(string3).append(")").toString());
++        this.configManager.sendChatMessageToAllOps("§7(" + string3 + ")");
+         MinecraftServer.logger.info(string3);
+     }
+-    
++
+     private int parseInt(final String string, final int defaultValue) {
+         try {
+@@ -475,13 +597,13 @@
+         }
+     }
+-    
++
+     public void addToOnlinePlayerList(final IUpdatePlayerListBox playerListBox) {
+         this.playersOnline.add(playerListBox);
+     }
+-    
++
+     public static void main(final String[] args) {
+         try {
+             final MinecraftServer minecraftServer1 = new MinecraftServer();
+-            if (!GraphicsEnvironment.isHeadless() && (args.length <= 0 || !args[0].equals("nogui"))) {
++            if (!GraphicsEnvironment.isHeadless() && (args.length == 0 || !args[0].equals("nogui"))) {
+                 ServerGUI.initGui(minecraftServer1);
+             }
+@@ -489,20 +611,20 @@
+         }
+         catch (Exception exception2) {
+-            MinecraftServer.logger.log(Level.SEVERE, "Failed to start the minecraft server", (Throwable)exception2);
++            MinecraftServer.logger.log(Level.SEVERE, "Failed to start the minecraft server", exception2);
+         }
+     }
+-    
++
+     public File getFile(final String fileName) {
+         return new File(fileName);
+     }
+-    
++
+     public void addHelpCommandMessage(final String helpCommandMessage) {
+         MinecraftServer.logger.info(helpCommandMessage);
+     }
+-    
++
+     public String getUsername() {
+         return "CONSOLE";
+     }
+-    
++
+     public static boolean isServerRunning(final MinecraftServer mcServer) {
+         return mcServer.serverRunning;

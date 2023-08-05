@@ -1,0 +1,120 @@
+--- PlayerManager.java
++++ PlayerManager.java
+@@ -3,27 +3,31 @@
+ import java.io.IOException;
+ import java.util.ArrayList;
++
++import net.buj.rml.Game;
++import net.buj.rml.events.server.PlayerJoinEvent;
++import net.buj.rml.events.server.PlayerLeaveEvent;
+ import net.minecraft.server.MinecraftServer;
+ import java.util.List;
+ 
+ public class PlayerManager {
+-    private List players;
++    private List<EntityPlayerMP> players;
+     private MCHashTable2 playerInstances;
+-    private List playerInstancesToUpdate;
++    private List<PlayerInstance> playerInstancesToUpdate;
+     private MinecraftServer mcServer;
+-    
++
+     public PlayerManager(final MinecraftServer mcServer) {
+-        this.players = (List)new ArrayList();
++        this.players = new ArrayList<>();
+         this.playerInstances = new MCHashTable2();
+-        this.playerInstancesToUpdate = (List)new ArrayList();
++        this.playerInstancesToUpdate = new ArrayList<>();
+         this.mcServer = mcServer;
+     }
+-    
++
+     public void updatePlayerInstances() throws IOException {
+         for (int i1 = 0; i1 < this.playerInstancesToUpdate.size(); ++i1) {
+-            ((PlayerInstance)this.playerInstancesToUpdate.get(i1)).onUpdate();
++            this.playerInstancesToUpdate.get(i1).onUpdate();
+         }
+         this.playerInstancesToUpdate.clear();
+     }
+-    
++
+     private PlayerInstance getPlayerInstance(final int i1, final int i2, final boolean z3) {
+         final long j4 = i1 + 2147483647L | i2 + 2147483647L << 32;
+@@ -35,5 +39,5 @@
+         return playerInstance6;
+     }
+-    
++
+     public void sendTileEntity(final Packet packet, final int x, final int y, final int z) {
+         final int i5 = x >> 4;
+@@ -44,5 +48,5 @@
+         }
+     }
+-    
++
+     public void markBlockNeedsUpdate(final int x, final int y, final int z) {
+         final int i4 = x >> 4;
+@@ -53,7 +57,10 @@
+         }
+     }
+-    
++
+     public void addPlayer(final EntityPlayerMP entityPlayerMP) {
+-        this.mcServer.configManager.sendPacketToAllPlayers(new Packet3Chat(new StringBuilder("§e").append(entityPlayerMP.username).append(" joined the game.").toString()));
++        PlayerJoinEvent event = Game.EVENT_LOOP.emit(new PlayerJoinEvent(entityPlayerMP.username, "§e" + entityPlayerMP.username + " joined the game."));
++        if (!event.isCancelled()) {
++            this.mcServer.configManager.sendPacketToAllPlayers(new Packet3Chat(event.getJoinMessage()));
++        }
+         final int i2 = (int)entityPlayerMP.posX >> 4;
+         final int i3 = (int)entityPlayerMP.posZ >> 4;
+@@ -67,7 +74,10 @@
+         this.players.add(entityPlayerMP);
+     }
+-    
++
+     public void removePlayer(final EntityPlayerMP entityPlayerMP) {
+-        this.mcServer.configManager.sendPacketToAllPlayers(new Packet3Chat(new StringBuilder("§e").append(entityPlayerMP.username).append(" left the game.").toString()));
++        PlayerLeaveEvent event = Game.EVENT_LOOP.emit(new PlayerLeaveEvent(entityPlayerMP.username, "§e" + entityPlayerMP.username + " left the game."));
++        if (!event.isCancelled()) {
++            this.mcServer.configManager.sendPacketToAllPlayers(new Packet3Chat(event.getLeaveMessage()));
++        }
+         final int i2 = (int)entityPlayerMP.posX >> 4;
+         final int i3 = (int)entityPlayerMP.posZ >> 4;
+@@ -82,5 +92,5 @@
+         this.players.remove(entityPlayerMP);
+     }
+-    
++
+     private boolean a(final int i1, final int i2, final int i3, final int i4) {
+         final int i5 = i1 - i3;
+@@ -88,5 +98,5 @@
+         return i5 >= -10 && i5 <= 10 && (i6 >= -10 && i6 <= 10);
+     }
+-    
++
+     public void updateMountedMovingPlayer(final EntityPlayerMP entityPlayerMP) {
+         final int i2 = (int)entityPlayerMP.posX >> 4;
+@@ -119,18 +129,18 @@
+         }
+     }
+-    
++
+     public int getMaxTrackingDistance() {
+         return 144;
+     }
+-    
++
+     static MinecraftServer getMinecraftServer(final PlayerManager playerManager) {
+         return playerManager.mcServer;
+     }
+-    
++
+     static MCHashTable2 getPlayerInstances(final PlayerManager playerManager) {
+         return playerManager.playerInstances;
+     }
+-    
+-    static List getPlayerInstancesToUpdate(final PlayerManager playerManager) {
++
++    static List<PlayerInstance> getPlayerInstancesToUpdate(final PlayerManager playerManager) {
+         return playerManager.playerInstancesToUpdate;
+     }

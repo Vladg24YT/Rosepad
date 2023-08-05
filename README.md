@@ -1,31 +1,31 @@
 # Rosepad Server&Client
 
-Rosepad is a custom Lilypad QA server/client based on [Smaed's unofficial jars](https://github.com/AlphaVerUnofficialJars)
+Rosepad is a custom Lilypad QA server/client based on [LPUJ](https://github.com/AlphaVerUnofficialJars)
 focused on adding new features to the game.
 
-## Installation
+## Building
 
-- Install both JDK 8 and JDK 17
-- Clone this repository
-- Run `TOOLKIT_JAVA17=/path/to/your/jdk17/home ./gradlew -Dorg.gradle.java.home=/path/to/your/java8/home prepare injectClasses processPatches shadowJar pack` and wait for build to finish
-
-> /!\ Caution /!\
-> You may have to re-run build several times for it to succeed.
-> If you encounter `java.lang.IllegalStateException: An error occurred while decompiling this method.` in runtime, try rebuilding Rosepad.
+1. Install [JDK8](https://adoptium.net/temurin/releases/?version=8) and [Git](https://git-scm.com/) (Git Bash on Windows)
+2. Clone this repository `$ git clone https://github.com/RosepadMC/Rosepad --recursive`
+3. Run `$ ./gradlew prepare injectClasses processPatches pack` and wait for build to finish
 
 ## Running
 
-To test Rosepad, you must set it up and run `./gradlew -Dorg.gradle.java.home=/path/to/your/java8/home build runClient`.
+Download the jar from the [Releases Page](https://github.com/RosepadMC/Rosepad/releases/tag/beta) or
+the latest [Dev Build](https://nightly.link/RosepadMC/Rosepad/workflows/main/master) if you want to
+help testing Rosepad
 
-For the server, run `./gradlew -Dorg.gradle.java.home=/path/to/your/java8/home build runServer`.
+Installation help
+- [MultiMC/PrismLauncher](docs/installing/multimc.md)
+- [Minecraft Launcher](docs/installing/vanilla.md)
+
+Rosepad can generate keys, therefore no online registration required
 
 ## Contributing
 
 Since Minecraft is not licensed under a free software license, we can't share its source code, any modifications
-must be stored in .patch files (at least until proper code injections will be implemented) Make sure to test your
-patches before making a pull request
+must be stored in `.patch` files. Do `./gradlew createPatches ejectClasses` to create new patches. Make sure to
+test your patches before making a pull request
 
-Build Rosepad use `TOOLKIT_JAVA17=/path/to/your/jdk17/home ./gradlew -Dorg.gradle.java.home=/path/to/your/java8/home ejectClasses createPatches shadowJar pack`
-
-All tests should be done on an obfuscated build since obfuscation breaks some things in the code
-
+> Rosepad is licensed under [GPLv3](https://www.gnu.org/licenses/gpl-3.0.en.html). If you are publishing your changes,
+> make sure you are following the terms of the license
